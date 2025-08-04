@@ -45,7 +45,6 @@ const DrawingControls: React.FC<DrawingControlsProps> = ({
 }) => {
   return (
     <Box sx={{ width: '100%' }}>
-      {/* History Controls */}
       <Paper 
         elevation={2} 
         sx={{ 
@@ -99,7 +98,7 @@ const DrawingControls: React.FC<DrawingControlsProps> = ({
               </Button>
             </span>
           </Tooltip>
-          <Tooltip title="Redo last action">
+          <Tooltip title="Redo action">
             <span>
               <Button
                 variant="contained"
@@ -128,7 +127,6 @@ const DrawingControls: React.FC<DrawingControlsProps> = ({
         </Box>
       </Paper>
 
-      {/* Action Controls */}
       <Paper 
         elevation={2} 
         sx={{ 
@@ -168,7 +166,6 @@ const DrawingControls: React.FC<DrawingControlsProps> = ({
         </Tooltip>
       </Paper>
 
-      {/* File Operations */}
       <Paper 
         elevation={2} 
         sx={{ 
@@ -237,7 +234,6 @@ const DrawingControls: React.FC<DrawingControlsProps> = ({
         </Grid>
       </Paper>
 
-      {/* Export */}
       <Paper 
         elevation={2} 
         sx={{ 

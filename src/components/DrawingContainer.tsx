@@ -13,14 +13,18 @@ import {
 } from '@mui/material';
 import DrawingCanvas from './DrawingCanvas';
 import type { DrawingCanvasRef } from './DrawingCanvas';
-import AIPromptInput from './AIPromptInput';
+import ChatHistory from './ChatHistory';
+import type { ChatMessage } from './ChatHistory';
+import ChatInput from './ChatInput';
 import DrawingControls from './DrawingControls';
 import { aiService } from '../services/aiService';
-import { drawingService } from '../services/drawingService';
-import { LocalDrawingService } from '../services/localDrawingService';
-import type { DrawingCommand, DrawCommand } from '../types/models';
+import type { DrawCommand, User } from '../types/models';
 
-const DrawingContainer: React.FC = () => {
+interface DrawingContainerProps {
+  currentUser: User;
+}
+
+const DrawingContainer: React.FC<DrawingContainerProps> = ({ currentUser }) => {
   const canvasRef = useRef<DrawingCanvasRef>(null);
   const [currentDrawCommands, setCurrentDrawCommands] = useState<DrawCommand[]>([]);
   const [commandHistory, setCommandHistory] = useState<DrawCommand[][]>([]);
@@ -29,38 +33,61 @@ const DrawingContainer: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [newDrawingDialogOpen, setNewDrawingDialogOpen] = useState(false);
   const [drawingTitle, setDrawingTitle] = useState('');
   const [currentDrawingId, setCurrentDrawingId] = useState<number | null>(null);
-  const [currentUserId] = useState<number>(2); 
-  const [useLocalService, setUseLocalService] = useState(true); 
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [userDrawings, setUserDrawings] = useState<any[]>([]);
 
   const addToHistory = useCallback((commands: DrawCommand[]) => {
     const newHistory = commandHistory.slice(0, historyIndex + 1);
     newHistory.push([...commands]);
     setCommandHistory(newHistory);
     setHistoryIndex(newHistory.length - 1);
+    setHasUnsavedChanges(true);
   }, [commandHistory, historyIndex]);
 
-  const handleGenerateDrawing = async (prompt: string) => {
+  const addChatMessage = useCallback((content: string, type: 'user' | 'bot', isDrawingCommand = false) => {
+    const newMessage: ChatMessage = {
+      id: Date.now().toString(),
+      type,
+      content,
+      timestamp: new Date(),
+      isDrawingCommand,
+    };
+    setChatMessages(prev => [...prev, newMessage]);
+  }, []);
+
+  const loadUserDrawings = useCallback(() => {
+    const drawings = JSON.parse(localStorage.getItem('localDrawings') || '[]')
+      .filter((d: any) => d.userId === currentUser.userId);
+    setUserDrawings(drawings);
+  }, [currentUser.userId]);
+
+  const handleSendMessage = async (message: string) => {
+    addChatMessage(message, 'user', true);
+    
     setIsLoading(true);
     setError('');
     
     try {
-      let commands: DrawCommand[];
+      const newCommands = await aiService.generateDrawingCommands(
+        currentUser.userId, 
+        message, 
+        `Drawing-${Date.now()}`
+      );
       
-      if (useLocalService) {
-        commands = LocalDrawingService.generateDrawingFromPrompt(prompt);
-      } else {
-        const defaultTitle = `Drawing: ${prompt.substring(0, 50)}${prompt.length > 50 ? '...' : ''}`;
-        commands = await aiService.generateDrawingCommands(currentUserId, prompt, defaultTitle);
-      }
+      const updatedCommands = [...currentDrawCommands, ...newCommands];
+      setCurrentDrawCommands(updatedCommands);
+      addToHistory(updatedCommands);
       
-      setCurrentDrawCommands(commands);
-      addToHistory(commands);
+      addChatMessage('I added the drawing you requested!', 'bot');
       
-      setSuccessMessage('Drawing generated successfully!');
     } catch (err) {
-      setError('Error generating drawing. Please try again.');
+      const errorMessage = err instanceof Error ? err.message : 'Error creating drawing. Please try again.';
+      setError(errorMessage);
+      addChatMessage('Sorry, there was an error creating the drawing. Please try again.', 'bot');
       console.error('Error generating drawing:', err);
     } finally {
       setIsLoading(false);
@@ -89,6 +116,25 @@ const DrawingContainer: React.FC = () => {
     addToHistory([]);
   };
 
+  const handleNewDrawing = () => {
+    if (hasUnsavedChanges) {
+      setNewDrawingDialogOpen(true);
+    } else {
+      startNewDrawing();
+    }
+  };
+
+  const startNewDrawing = () => {
+    canvasRef.current?.clear();
+    setCurrentDrawCommands([]);
+    setCommandHistory([]);
+    setHistoryIndex(-1);
+    setChatMessages([]);
+    setCurrentDrawingId(null);
+    setHasUnsavedChanges(false);
+    setNewDrawingDialogOpen(false);
+  };
+
   const handleSave = () => {
     setSaveDialogOpen(true);
   };
@@ -98,46 +144,23 @@ const DrawingContainer: React.FC = () => {
     
     setIsLoading(true);
     try {
-      if (useLocalService) {
-        LocalDrawingService.saveDrawingLocally(drawingTitle, currentDrawCommands);
-        setSuccessMessage('Drawing saved locally!');
-      } else {
-        if (currentDrawingId) {
-          await drawingService.updateDrawingTitle(currentDrawingId, drawingTitle);
-          for (const command of currentDrawCommands) {
-            const drawingCommand: DrawingCommand = {
-              drawingCommandId: 0,
-              drawingId: currentDrawingId,
-              commandType: command.type.toUpperCase(),
-              parameters: JSON.stringify(command),
-              order: 0,
-            };
-            await drawingService.addCommand(currentDrawingId, drawingCommand);
-          }
-        } else {
-          const newDrawing = await drawingService.createDrawing({
-            userId: currentUserId,
-            title: drawingTitle,
-          });
-          setCurrentDrawingId(newDrawing.drawingId);
-          
-          for (let i = 0; i < currentDrawCommands.length; i++) {
-            const command = currentDrawCommands[i];
-            const drawingCommand: DrawingCommand = {
-              drawingCommandId: 0,
-              drawingId: newDrawing.drawingId,
-              commandType: command.type.toUpperCase(),
-              parameters: JSON.stringify(command),
-              order: i,
-            };
-            await drawingService.addCommand(newDrawing.drawingId, drawingCommand);
-          }
-        }
-        setSuccessMessage('Drawing saved successfully!');
-      }
+      const drawings = JSON.parse(localStorage.getItem('localDrawings') || '[]');
+      const newDrawing = {
+        id: Date.now(),
+        title: drawingTitle,
+        commands: currentDrawCommands,
+        userId: currentUser.userId,
+        createdAt: new Date().toISOString()
+      };
+
+      drawings.push(newDrawing);
+      localStorage.setItem('localDrawings', JSON.stringify(drawings));
       
+      setSuccessMessage('Drawing saved successfully!');
+      setHasUnsavedChanges(false);
       setSaveDialogOpen(false);
       setDrawingTitle('');
+      loadUserDrawings();
     } catch (err) {
       setError('Error saving drawing');
       console.error('Error saving drawing:', err);
@@ -146,8 +169,29 @@ const DrawingContainer: React.FC = () => {
     }
   };
 
-  const handleLoad = async () => {
-    setError('Load drawing functionality will be added soon');
+  const handleLoadDrawing = (drawingId: number) => {
+    const drawings = JSON.parse(localStorage.getItem('localDrawings') || '[]');
+    const drawing = drawings.find((d: any) => d.id === drawingId);
+    if (drawing) {
+      setCurrentDrawCommands(drawing.commands);
+      addToHistory(drawing.commands);
+      setDrawingTitle(drawing.title);
+      setCurrentDrawingId(drawing.id);
+      setHasUnsavedChanges(false);
+    }
+  };
+
+  const handleDeleteDrawing = (drawingId: number) => {
+    if (confirm('Are you sure you want to delete this drawing?')) {
+      const drawings = JSON.parse(localStorage.getItem('localDrawings') || '[]');
+      const filteredDrawings = drawings.filter((d: any) => d.id !== drawingId);
+      localStorage.setItem('localDrawings', JSON.stringify(filteredDrawings));
+      
+      loadUserDrawings();
+      if (currentDrawingId === drawingId) {
+        startNewDrawing();
+      }
+    }
   };
 
   const handleDownload = () => {
@@ -160,13 +204,15 @@ const DrawingContainer: React.FC = () => {
     }
   };
 
+  React.useEffect(() => {
+    loadUserDrawings();
+  }, [loadUserDrawings]);
+
   return (
-    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', height: 'calc(100vh - 80px)', overflow: 'hidden' }}>
       <Box 
         sx={{ 
-          width: '25%',
-          minWidth: '320px',
-          maxWidth: '400px',
+          width: '300px',
           backgroundColor: '#f5f5f5',
           borderRight: '1px solid #e0e0e0',
           display: 'flex',
@@ -179,30 +225,19 @@ const DrawingContainer: React.FC = () => {
             DrawBot
           </Typography>
           <Typography variant="body2" align="center" color="text.secondary">
-            Smart Drawing Bot
+            Smart Drawing Robot
           </Typography>
         </Box>
 
         <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
-          <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 1 }}>
-            {useLocalService ? 'Local Demo Mode' : 'AI Service'}
-          </Typography>
           <Button
             fullWidth
-            size="small"
-            variant="outlined"
-            onClick={() => setUseLocalService(!useLocalService)}
+            variant="contained"
+            onClick={handleNewDrawing}
+            sx={{ mb: 1 }}
           >
-            Switch to {useLocalService ? 'AI Service' : 'Local Demo'}
+            New Drawing
           </Button>
-        </Box>
-
-        <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
-          <AIPromptInput
-            onGenerate={handleGenerateDrawing}
-            isLoading={isLoading}
-            error={error}
-          />
         </Box>
 
         <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
@@ -214,7 +249,7 @@ const DrawingContainer: React.FC = () => {
             onRedo={handleRedo}
             onClear={handleClear}
             onSave={handleSave}
-            onLoad={handleLoad}
+            onLoad={() => {}}
             onDownload={handleDownload}
             canUndo={historyIndex > 0}
             canRedo={historyIndex < commandHistory.length - 1}
@@ -222,10 +257,28 @@ const DrawingContainer: React.FC = () => {
           />
         </Box>
 
-        <Box sx={{ p: 2, flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-          <Typography variant="body2" color="text.secondary" align="center">
-            Enter instructions in natural language and get automatic drawings
+        <Box sx={{ p: 2, flexGrow: 1, overflow: 'auto' }}>
+          <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold' }}>
+            My Drawings
           </Typography>
+          {userDrawings.map((drawing) => (
+            <Box key={drawing.id} sx={{ mb: 1, p: 1, border: '1px solid #ddd', borderRadius: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                {drawing.title}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {new Date(drawing.createdAt).toLocaleDateString('en-US')}
+              </Typography>
+              <Box sx={{ mt: 1 }}>
+                <Button size="small" onClick={() => handleLoadDrawing(drawing.id)}>
+                  Load
+                </Button>
+                <Button size="small" color="error" onClick={() => handleDeleteDrawing(drawing.id)}>
+                  Delete
+                </Button>
+              </Box>
+            </Box>
+          ))}
         </Box>
       </Box>
 
@@ -259,10 +312,39 @@ const DrawingContainer: React.FC = () => {
           <DrawingCanvas
             ref={canvasRef}
             drawCommands={currentDrawCommands}
-            width={Math.min(800, window.innerWidth * 0.7)}
+            width={Math.min(800, window.innerWidth * 0.5)}
             height={Math.min(600, window.innerHeight * 0.7)}
           />
         </Box>
+      </Box>
+
+      <Box 
+        sx={{ 
+          width: '350px',
+          backgroundColor: 'white',
+          borderLeft: '1px solid #e0e0e0',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}
+      >
+        <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0', backgroundColor: '#f8f9fa' }}>
+          <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+            Drawing Chat
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {hasUnsavedChanges && '• Unsaved changes'}
+          </Typography>
+        </Box>
+
+        <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
+          <ChatHistory messages={chatMessages} />
+        </Box>
+
+        <ChatInput 
+          onSendMessage={handleSendMessage}
+          isLoading={isLoading}
+        />
       </Box>
 
       <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)}>
@@ -271,12 +353,12 @@ const DrawingContainer: React.FC = () => {
           <TextField
             autoFocus
             margin="dense"
-            label="Drawing Title"
+            label="Drawing Name"
             fullWidth
             variant="outlined"
             value={drawingTitle}
             onChange={(e) => setDrawingTitle(e.target.value)}
-            placeholder="Enter drawing title"
+            placeholder="Enter drawing name"
           />
         </DialogContent>
         <DialogActions>
@@ -291,6 +373,29 @@ const DrawingContainer: React.FC = () => {
         </DialogActions>
       </Dialog>
 
+      <Dialog open={newDrawingDialogOpen} onClose={() => setNewDrawingDialogOpen(false)}>
+        <DialogTitle>New Drawing</DialogTitle>
+        <DialogContent>
+          <Typography>
+            You have unsaved changes. Would you like to save the current drawing before starting a new one?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={startNewDrawing} color="error">
+            Clear without saving
+          </Button>
+          <Button onClick={() => {
+            setNewDrawingDialogOpen(false);
+            setSaveDialogOpen(true);
+          }} variant="contained">
+            Save and start new
+          </Button>
+          <Button onClick={() => setNewDrawingDialogOpen(false)}>
+            Cancel
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Snackbar
         open={!!successMessage}
         autoHideDuration={3000}
@@ -298,6 +403,16 @@ const DrawingContainer: React.FC = () => {
       >
         <Alert severity="success" onClose={() => setSuccessMessage('')}>
           {successMessage}
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={!!error}
+        autoHideDuration={5000}
+        onClose={() => setError('')}
+      >
+        <Alert severity="error" onClose={() => setError('')}>
+          {error}
         </Alert>
       </Snackbar>
     </Box>

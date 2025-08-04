@@ -1,20 +1,27 @@
 import axios from 'axios';
 import type { Drawing, CreateDrawingDto, DrawingCommandDto, ApiResponse } from '../types/models';
 
-const API_BASE_URL = 'https://localhost:7208/api'; 
+const API_BASE_URL = 'https://localhost:7208/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // Add timeout
+  timeout: 30000, 
 });
 
 export const drawingService = {
   async createDrawing(drawingData: CreateDrawingDto): Promise<Drawing> {
-    const response = await api.post<ApiResponse<Drawing>>('/drawing', drawingData);
-    return response.data.data!;
+    try {
+      console.log('Creating drawing:', drawingData);
+      const response = await api.post<ApiResponse<Drawing>>('/drawing', drawingData);
+      console.log('Drawing creation response:', response.data);
+      return response.data.data!;
+    } catch (error) {
+      console.error('Drawing creation error:', error);
+      throw error;
+    }
   },
 
   async getDrawing(drawingId: number): Promise<Drawing> {

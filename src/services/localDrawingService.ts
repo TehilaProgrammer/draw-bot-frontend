@@ -1,14 +1,12 @@
 import type { DrawCommand } from '../types/models';
 
 export class LocalDrawingService {
-  /**
-   * Creates a simple drawing from prompt
-   */
+  private static readonly DRAWINGS_KEY = 'localDrawings';
+
   static generateDrawingFromPrompt(prompt: string): DrawCommand[] {
     const lowerPrompt = prompt.toLowerCase();
     const commands: DrawCommand[] = [];
 
-    // House drawing
     if (lowerPrompt.includes('house')) {
       commands.push(
         { type: 'circle', x: 250, y: 100, radius: 30, color: '#FFCC00' },
@@ -28,59 +26,39 @@ export class LocalDrawingService {
         { type: 'rect', x: 410, y: 210, width: 20, height: 40, color: '#8B4513' },
       );
     }
-
-    // Sun drawing
     else if (lowerPrompt.includes('sun')) {
       commands.push(
         { type: 'circle', x: 100, y: 100, radius: 40, color: '#FFD700' }
       );
     }
-
-    // Tree drawing
     else if (lowerPrompt.includes('tree')) {
       commands.push(
-        // Trunk
         { type: 'rect', x: 300, y: 250, width: 20, height: 80, color: '#8B4513' },
-        // Leaves
         { type: 'circle', x: 310, y: 240, radius: 50, color: '#228B22' }
       );
     }
-
-    // Boat drawing
     else if (lowerPrompt.includes('boat')) {
       commands.push(
-        // Boat body
         { type: 'rect', x: 200, y: 300, width: 120, height: 30, color: '#8B4513' },
-        // Sail
         { type: 'triangle', x1: 260, y1: 300, x2: 320, y2: 300, x3: 290, y3: 220, color: '#FFFFFF' },
-        // Flag
         { type: 'rect', x: 315, y: 220, width: 5, height: 20, color: '#000000' },
         { type: 'rect', x: 320, y: 220, width: 15, height: 10, color: '#FF0000' }
       );
     }
-
-    // Flower drawing
     else if (lowerPrompt.includes('flower')) {
       commands.push(
-        // Stem
         { type: 'line', x1: 250, y1: 350, x2: 250, y2: 280, color: '#228B22' },
-        // Leaves
         { type: 'circle', x: 230, y: 320, radius: 15, color: '#228B22' },
         { type: 'circle', x: 270, y: 320, radius: 15, color: '#228B22' },
-        // Flower
         { type: 'circle', x: 250, y: 280, radius: 25, color: '#FF69B4' },
         { type: 'circle', x: 250, y: 280, radius: 15, color: '#FFFF00' }
       );
     }
-
-    // Heart drawing
     else if (lowerPrompt.includes('heart')) {
-      // Create heart with lines
       for (let i = 0; i < 36; i++) {
         const angle = (i * 10 * Math.PI) / 180;
         const nextAngle = ((i + 1) * 10 * Math.PI) / 180;
 
-        // Heart shape formula
         const x1 = 250 + 30 * Math.cos(angle) * (1 - Math.sin(angle));
         const y1 = 250 + 30 * Math.sin(angle) * (1 - Math.sin(angle));
         const x2 = 250 + 30 * Math.cos(nextAngle) * (1 - Math.sin(nextAngle));
@@ -96,8 +74,6 @@ export class LocalDrawingService {
         });
       }
     }
-
-    // Star drawing
     else if (lowerPrompt.includes('star')) {
       const centerX = 250;
       const centerY = 250;
@@ -137,8 +113,6 @@ export class LocalDrawingService {
         }
       }
     }
-
-    // Default drawing - simple square
     else {
       commands.push(
         { type: 'rect', x: 200, y: 200, width: 100, height: 100, color: '#4169E1' },
@@ -146,9 +120,7 @@ export class LocalDrawingService {
       );
     }
 
-    // Additional effects
     if (lowerPrompt.includes('rainbow')) {
-      // Create rainbow
       for (let i = 0; i < 180; i++) {
         const angle = (i * Math.PI) / 180;
         const radius = 80;
@@ -174,42 +146,36 @@ export class LocalDrawingService {
     return commands;
   }
 
-  /**
-   * Save drawing locally
-   */
-  static saveDrawingLocally(title: string, commands: DrawCommand[]): void {
+  static saveDrawingLocally(title: string, commands: DrawCommand[], userId: number): void {
     const drawings = this.getLocalDrawings();
     const newDrawing = {
       id: Date.now(),
       title,
       commands,
+      userId,
       createdAt: new Date().toISOString()
     };
 
     drawings.push(newDrawing);
-    localStorage.setItem('localDrawings', JSON.stringify(drawings));
+    localStorage.setItem(this.DRAWINGS_KEY, JSON.stringify(drawings));
   }
 
-  /**
-   * Get local drawings
-   */
   static getLocalDrawings(): any[] {
-    const drawings = localStorage.getItem('localDrawings');
+    const drawings = localStorage.getItem(this.DRAWINGS_KEY);
     return drawings ? JSON.parse(drawings) : [];
   }
 
-  /**
-   * Delete local drawing
-   */
+  static getUserDrawings(userId: number): any[] {
+    const drawings = this.getLocalDrawings();
+    return drawings.filter((d: any) => d.userId === userId);
+  }
+
   static deleteLocalDrawing(id: number): void {
     const drawings = this.getLocalDrawings();
     const filteredDrawings = drawings.filter((d: any) => d.id !== id);
-    localStorage.setItem('localDrawings', JSON.stringify(filteredDrawings));
+    localStorage.setItem(this.DRAWINGS_KEY, JSON.stringify(filteredDrawings));
   }
 
-  /**
-   * Get local drawing by ID
-   */
   static getLocalDrawing(id: number): any {
     const drawings = this.getLocalDrawings();
     return drawings.find((d: any) => d.id === id);

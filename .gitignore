@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local services - not used in production
+src/services/localAuthService.ts
+src/services/localDrawingService.ts
