@@ -1,21 +1,28 @@
 import React, { useState } from 'react';
 import type { RegisterUserDto } from '../types/models';
+import { useAuthContext } from '../hooks/AuthContext';
 
 interface RegisterProps {
-  onRegister: (userData: RegisterUserDto) => void;
   onSwitchToLogin: () => void;
 }
 
-const Register: React.FC<RegisterProps> = ({ onRegister, onSwitchToLogin }) => {
+const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
   const [formData, setFormData] = useState<RegisterUserDto>({
     userName: '',
     password: '',
     email: ''
   });
+  const { register, isLoading } = useAuthContext();
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onRegister(formData);
+    setError(null);
+    try {
+      await register(formData);
+    } catch (err: any) {
+      setError(err.message || 'Registration failed');
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -29,6 +36,7 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onSwitchToLogin }) => {
     <div className="auth-container">
       <form onSubmit={handleSubmit} className="auth-form">
         <h2>Register</h2>
+        {error && <div className="error-message">{error}</div>}
         <div className="form-group">
           <label htmlFor="userName">Username:</label>
           <input
@@ -38,6 +46,7 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onSwitchToLogin }) => {
             value={formData.userName}
             onChange={handleChange}
             required
+            disabled={isLoading}
           />
         </div>
         <div className="form-group">
@@ -49,6 +58,7 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onSwitchToLogin }) => {
             value={formData.email}
             onChange={handleChange}
             required
+            disabled={isLoading}
           />
         </div>
         <div className="form-group">
@@ -60,9 +70,12 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onSwitchToLogin }) => {
             value={formData.password}
             onChange={handleChange}
             required
+            disabled={isLoading}
           />
         </div>
-        <button type="submit" className="auth-button">Register</button>
+        <button type="submit" className="auth-button" disabled={isLoading}>
+          {isLoading ? 'Registering...' : 'Register'}
+        </button>
         <p>
           Already have an account? 
           <button type="button" onClick={onSwitchToLogin} className="link-button">

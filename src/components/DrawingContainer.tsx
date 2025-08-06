@@ -18,13 +18,11 @@ import type { ChatMessage } from './ChatHistory';
 import ChatInput from './ChatInput';
 import DrawingControls from './DrawingControls';
 import { aiService } from '../services/aiService';
-import type { DrawCommand, User } from '../types/models';
+import type { DrawCommand } from '../types/models';
+import { useAuthContext } from '../hooks/AuthContext';
 
-interface DrawingContainerProps {
-  currentUser: User;
-}
-
-const DrawingContainer: React.FC<DrawingContainerProps> = ({ currentUser }) => {
+const DrawingContainer: React.FC = () => {
+  const { currentUser } = useAuthContext();
   const canvasRef = useRef<DrawingCanvasRef>(null);
   const [currentDrawCommands, setCurrentDrawCommands] = useState<DrawCommand[]>([]);
   const [commandHistory, setCommandHistory] = useState<DrawCommand[][]>([]);
@@ -61,9 +59,9 @@ const DrawingContainer: React.FC<DrawingContainerProps> = ({ currentUser }) => {
 
   const loadUserDrawings = useCallback(() => {
     const drawings = JSON.parse(localStorage.getItem('localDrawings') || '[]')
-      .filter((d: any) => d.userId === currentUser.userId);
+      .filter((d: any) => d.userId === currentUser?.userId);
     setUserDrawings(drawings);
-  }, [currentUser.userId]);
+  }, [currentUser?.userId]);
 
   const handleSendMessage = async (message: string) => {
     addChatMessage(message, 'user', true);
@@ -73,7 +71,7 @@ const DrawingContainer: React.FC<DrawingContainerProps> = ({ currentUser }) => {
     
     try {
       const newCommands = await aiService.generateDrawingCommands(
-        currentUser.userId, 
+        currentUser?.userId ?? 0, 
         message, 
         `Drawing-${Date.now()}`
       );
@@ -149,7 +147,7 @@ const DrawingContainer: React.FC<DrawingContainerProps> = ({ currentUser }) => {
         id: Date.now(),
         title: drawingTitle,
         commands: currentDrawCommands,
-        userId: currentUser.userId,
+        userId: currentUser?.userId ?? 0,
         createdAt: new Date().toISOString()
       };
 

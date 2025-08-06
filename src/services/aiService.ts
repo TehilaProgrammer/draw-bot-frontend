@@ -8,7 +8,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // Add timeout
+  timeout: 30000, 
 });
 
 export const aiService = {
@@ -29,7 +29,6 @@ export const aiService = {
       
       const data = response.data;
       
-      // Check if response has the expected structure
       if (!data || !data.commands || !Array.isArray(data.commands)) {
         throw new Error('Invalid response format from server');
       }

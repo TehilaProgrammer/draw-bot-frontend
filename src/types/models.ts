@@ -76,3 +76,9 @@ export interface ApiResponse<T> {
   data?: T;
   message?: string;
 } 
+
+export interface AuthUser {
+  userId: number;
+  userName: string;
+  email: string;
+}
